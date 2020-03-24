@@ -42,7 +42,7 @@ from tqdm import tqdm
 import random
 
 class KittiConverter:
-    def __init__(self, store_dir: str = "/home/cel/PERL/code/DockerFolder/media/Samsung_T5/lyft/lyft_kitti/train/"): ## str = "~/lyft_kitti/train/"
+    def __init__(self, store_dir: str = "~/lyft_kitti/train/"):
         """
 
         Args:
