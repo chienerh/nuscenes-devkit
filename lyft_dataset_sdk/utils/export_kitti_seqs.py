@@ -40,9 +40,10 @@ from pyquaternion import Quaternion
 from tqdm import tqdm
 
 import random
+import os
 
 class KittiConverter:
-    def __init__(self, store_dir: str = "~/lyft_kitti/train/"):
+    def __init__(self, store_dir: str = "/home/cel/PERL/code/DockerFolder/media/Samsung_T5/lyft/lyft_kitti/train/"): ## str = "~/lyft_kitti/train/"
         """
 
         Args:
@@ -168,6 +169,8 @@ class KittiConverter:
         cs_record_lid = self.lyft_ds.get("calibrated_sensor", sd_record_lid["calibrated_sensor_token"])
         ego_record_lid = self.lyft_ds.get("ego_pose", sd_record_lid["ego_pose_token"])
 
+        
+
         for cam_name in self.cams_to_see:
             cam_front_token = sample["data"][cam_name]
             # if self.get_all_detections:
@@ -242,11 +245,14 @@ class KittiConverter:
             src_lid_path = self.lyft_ds.data_path.joinpath(filename_lid_full)
             dst_lid_path = lidar_folder.joinpath(f"{token_to_write}.bin")
 
-            pcl = LidarPointCloud.from_file(Path(src_lid_path))
-            # In KITTI lidar frame.
-            pcl.rotate(self.kitti_to_nu_lidar_inv.rotation_matrix)
-            with open(dst_lid_path, "w") as lid_file:
-                pcl.points.T.tofile(lid_file)
+            # just copy the file, not changing the points
+            os.system("cp " + str(src_lid_path) + " " + str(dst_lid_path))
+
+            # pcl = LidarPointCloud.from_file(Path(src_lid_path))
+            # # In KITTI lidar frame.
+            # pcl.rotate(self.kitti_to_nu_lidar_inv.rotation_matrix)
+            # with open(dst_lid_path, "w") as lid_file:
+            #     pcl.points.T.tofile(lid_file)
 
             # Add to tokens.
             # tokens.append(token_to_write)
@@ -262,6 +268,16 @@ class KittiConverter:
             kitti_transforms["Tr_velo_to_cam"] = np.hstack((velo_to_cam_rot, velo_to_cam_trans.reshape(3, 1)))
             kitti_transforms["Tr_imu_to_velo"] = imu_to_velo_kitti
             calib_path = calib_folder.joinpath(f"{token_to_write}.txt")
+            
+            if cam_name == "CAM_FRONT":
+                calib_path2 = scene_folder.joinpath("calib.txt")
+                with open(calib_path, "w") as calib_file:
+                    for (key, val) in kitti_transforms.items():
+                        val = val.flatten()
+                        val_str = "%.12e" % val[0]
+                        for v in val[1:]:
+                            val_str += " %.12e" % v
+                        calib_file.write("%s: %s\n" % (key, val_str))
 
             with open(calib_path, "w") as calib_file:
                 for (key, val) in kitti_transforms.items():
@@ -338,15 +354,31 @@ class KittiConverter:
             sd_record_lid = self.lyft_ds.get("sample_data", lidar_token)
             cs_record_lid = self.lyft_ds.get("calibrated_sensor", sd_record_lid["calibrated_sensor_token"])
             ego_record_lid = self.lyft_ds.get("ego_pose", sd_record_lid["ego_pose_token"])
+            # cam_front_token = sample["data"]["CAM_FRONT"]
+            # sd_record_cam = self.lyft_ds.get("sample_data", cam_front_token)
+            # cs_record_cam = self.lyft_ds.get("calibrated_sensor", sd_record_cam["calibrated_sensor_token"])
+            # ego_record_cam = self.lyft_ds.get("ego_pose", sd_record_cam["ego_pose_token"])
 
             lid_to_ego = transform_matrix(
                 cs_record_lid["translation"], Quaternion(cs_record_lid["rotation"]), inverse=False
             )
             lid_ego_to_world = transform_matrix(
                 ego_record_lid["translation"], Quaternion(ego_record_lid["rotation"]), inverse=False
-            )
+            )            
+            # world_to_cam_ego = transform_matrix(
+            #     ego_record_cam["translation"], Quaternion(ego_record_cam["rotation"]), inverse=True
+            # )
+            # ego_to_cam = transform_matrix(
+            #     cs_record_cam["translation"], Quaternion(cs_record_cam["rotation"]), inverse=True
+            # )
+            # velo_to_cam = np.dot(ego_to_cam, np.dot(world_to_cam_ego, np.dot(lid_ego_to_world, lid_to_ego)))
+
+            # # Convert from KITTI to nuScenes LIDAR coordinates, where we apply velo_to_cam.
+            # velo_to_cam_kitti = np.dot(velo_to_cam, self.kitti_to_nu_lidar.transformation_matrix)
+
 
             velo_pose = np.dot(lid_ego_to_world, lid_to_ego)
+            velo_pose_kitti = np.dot(velo_pose, self.kitti_to_nu_lidar.transformation_matrix)
             
             # If this is the start of the new sequence, update scence name, and update the first pose
             if sample_n == 0:             
@@ -367,7 +399,7 @@ class KittiConverter:
                 car_pose = np.dot(np.linalg.inv(first_pose), velo_pose)
 
             # Write to disk.
-            gt_file.write(" ".join(str(value) for pose_row in car_pose for value in pose_row))
+            gt_file.write(" ".join(str(value) for pose_row in car_pose[0:3, :] for value in pose_row))
             gt_file.write('\n')
 
 
